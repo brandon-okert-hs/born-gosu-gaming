@@ -102,8 +102,17 @@ defmodule Mentor do
   end
 
   defp getmatchingemoji(emojiname, default, guild) do
-    guild.emojis()
+    emoji = guild.emojis()
       |> Enum.find(default, fn e -> e.name == emojiname end)
+
+    case emoji do
+      s when is_binary(s) ->
+        s # built in emojis are just strings, like ":black_medium_square:"
+      correct = %Nostrum.Struct.Emoji{} ->
+        correct # guild.emojis() should only return these structs. But there's a bug where sometimes it returns maps instead
+      %{animated: animated, id: id, managed: managed, name: name, require_colons: require_colons, roles: roles} ->
+        %Nostrum.Struct.Emoji{animated: animated, id: id, managed: managed, name: name, require_colons: require_colons, roles: roles}
+    end
   end
 
   defp prettydate(iso8601) do
