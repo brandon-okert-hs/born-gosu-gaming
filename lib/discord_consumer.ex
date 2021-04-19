@@ -34,37 +34,41 @@ defmodule DiscordConsumer do
   end
 
   def handle_event({:MESSAGE_CREATE, {msg}, _}) do
-    case msg.content do
-      "!help" <> rest ->
-        rest
-          |> String.trim()
-          |> input_to_command(msg)
-          |> Command.run("help")
-      "!events" <> rest ->
-        rest
-          |> String.trim()
-          |> input_to_command(msg)
-          |> Command.run("event")
-      "!admin" <> rest ->
-        rest
-          |> String.trim()
-          |> input_to_command(msg)
-          |> Command.run("admin")
-      "!mentor" <> rest ->
-        rest
-          |> String.trim()
-          |> input_to_command(msg)
-          |> Command.run("mentor")
-      str ->
-        with true <- Enum.any?(msg.mentions, fn u -> u.id == Nostrum.Cache.Me.get().id end),
-             lower <- String.downcase(str),
-             trimmed <- String.trim(lower),
-             {:reply, {resp, img_bytes}} <- Butler.talk(trimmed, msg) do
-          if Enum.empty?(img_bytes) do
-            Nostrum.Api.create_message(msg.channel_id, resp)
-          else
-            Nostrum.Api.create_message(msg.channel_id, [content: resp, file: %{name: "motivation.jpg", body: to_string(img_bytes)}])
-          end
+    case MessageListener.onmessage(msg.author.id, String.trim(msg.content)) do
+      :found -> :donothing
+      :notfound ->
+        case msg.content do
+          "!help" <> rest ->
+            rest
+              |> String.trim()
+              |> input_to_command(msg)
+              |> Command.run("help")
+          "!events" <> rest ->
+            rest
+              |> String.trim()
+              |> input_to_command(msg)
+              |> Command.run("event")
+          "!admin" <> rest ->
+            rest
+              |> String.trim()
+              |> input_to_command(msg)
+              |> Command.run("admin")
+          "!mentor" <> rest ->
+            rest
+              |> String.trim()
+              |> input_to_command(msg)
+              |> Command.run("mentor")
+          str ->
+            with true <- Enum.any?(msg.mentions, fn u -> u.id == Nostrum.Cache.Me.get().id end),
+                lower <- String.downcase(str),
+                trimmed <- String.trim(lower),
+                {:reply, {resp, img_bytes}} <- Butler.talk(trimmed, msg) do
+              if Enum.empty?(img_bytes) do
+                Nostrum.Api.create_message(msg.channel_id, resp)
+              else
+                Nostrum.Api.create_message(msg.channel_id, [content: resp, file: %{name: "motivation.jpg", body: to_string(img_bytes)}])
+              end
+            end
         end
     end
   end

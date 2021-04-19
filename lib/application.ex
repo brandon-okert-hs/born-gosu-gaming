@@ -7,6 +7,7 @@ defmodule Main do
         {DiscordConsumer, name: DiscordConsumer},
         {Event.Persister, name: Event.Persister},
         %{id: Interaction, start: {Interaction, :start_link, []}},
+        %{id: MessageListener, start: {MessageListener, :start_link, []}},
         %{id: Event.Reminder.Server, start: {Event.Reminder, :start_link, [Event.default_reminders()]}},
         %{id: Settings, start: {Settings, :start_link, []}},
       ]

@@ -58,7 +58,7 @@ defmodule Mentor do
     users = @api.list_guild_members(guild_id, limit: 1000)
     case users do
       {:error, e} ->
-        @api.create_message(channel_id, "Discord failed to fetch memebers. Try again?")
+        @api.create_message(channel_id, "Discord failed to fetch members. Try again?")
         Logger.error("Error when searching discord for members with !mentor users: #{e}")
       {:ok, members} ->
         with guild <- Nostrum.Cache.GuildCache.get!(guild_id) do
