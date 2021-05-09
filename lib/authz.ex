@@ -18,6 +18,7 @@ defmodule Authz do
   def authorized_for_command?(member, guild, "setdaylightsavings", "admin"), do: is_admin?(member, guild)
   def authorized_for_command?(member, guild, "daylightsavings", "admin"), do: is_admin?(member, guild)
   def authorized_for_command?(member, guild, "tryout", "admin"), do: is_admin?(member, guild)
+  def authorized_for_command?(member, guild, "enableRolesListener", "admin"), do: is_admin?(member, guild)
 
   def authorized_for_command?(_, _, "help", "event"), do: true
   def authorized_for_command?(_, _, "dates", "event"), do: true

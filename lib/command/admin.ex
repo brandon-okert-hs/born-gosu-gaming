@@ -6,6 +6,7 @@ defmodule Admin do
   def run(%Command{discord_msg: m, command: "setdaylightsavings", args: [region, enabled? | _]}), do: setdaylightsavings(m.channel_id, region, enabled?)
   def run(%Command{discord_msg: m, command: "daylightsavings"}), do: daylightsavings(m.channel_id)
   def run(%Command{discord_msg: m, command: "tryout", args: [user1, user2 | _]}), do: tryout(m.channel_id, m.guild_id, m.author.id, user1, user2)
+  def run(%Command{discord_msg: m, command: "enableRolesListener", args: [mid | rest]}), do: enableRolesListener(m.channel_id, m.guild_id, mid, rest)
   def run(%Command{discord_msg: m, command: command, args: args}), do: unknown(m.channel_id, command, args, m.author.username, m.author.discriminator)
 
   defp unknown(channel_id, command, args, username, discriminator) do
@@ -21,12 +22,22 @@ defmodule Admin do
         - daylightsavings
             Displays what the settings for daylight savings are
             eg: '!admin daylightsavings'
-        
+
         - setdaylightsavings <eu|na> <yes|no>
             Toggles the default output formats between Daylight Savings and Summer
             times.
             eg: '!admin setdaylightsavings na yes'
             eg: '!admin setdaylightsavings eu no'
+
+        - enableRolesListener <mid> <emoji1> <emoji2:role2> ...
+            Reconfigures server role listeners on the given message id
+            Each arg after the first is an emoji:role pair
+            If the role is absent it is assumed to be the same as the emoji
+            Use quotes if the role name has spaces
+            eg: `!admin enableRolesListener 466648565415018507 Zerg Protoss Terran Random`
+            eg: `!admin enableRolesListener 466648570116702208 Bronze Silver Gold Platinum Diamond Master`
+            eg: `!admin enableRolesListener 487776565942288415 Osu Coop "Pathofexile:Path of Exile"`
+            eg: `!admin enableRolesListener 832456674 "newemoji:My New Role" "moar:Moarses"`
       """))
     end
   end
@@ -115,5 +126,101 @@ defmodule Admin do
     users
       |> Enum.map(fn m -> m.user.username end)
       |> Enum.join(", ")
+  end
+
+  defp enableRolesListener(channel_id, guild_id, target_mid, raw_map) do
+    guild = Nostrum.Cache.GuildCache.get!(guild_id)
+    case Integer.parse(target_mid) do
+      {mid, ""} ->
+        case @api.get_channel_message(channel_id, mid) do
+          {:error, _} -> @api.create_message(channel_id, "A message with id #{mid} doesn't exist")
+          {:ok, _} ->
+            case parse_emoji_role_map(raw_map) do
+              s when is_binary(s) ->
+                @api.create_message(channel_id, "There were errors in your input:\n#{s}")
+              list ->
+                add_role_listener(list, mid, guild)
+                msg = list
+                  |> Enum.map(fn {e, r} -> "Reacting with #{getmatchingemoji(e, guild)} will now apply role `#{r}`" end)
+                  |> Enum.join("\n")
+                @api.create_message(channel_id, msg)
+            end
+        end
+      _ -> @api.create_message(channel_id, "The target message id needs to be an integer. You gave: `#{target_mid}`")
+    end
+  end
+
+  defp parse_emoji_role_map(raw_args) do
+    all = raw_args
+      |> Enum.map(fn a -> parse_arg(a) end)
+    correct = all
+      |> Enum.filter(fn {l, _} -> l != :error end)
+    incorrect = all
+      |> Enum.filter(fn {l ,_} -> l == :error end)
+
+    if Enum.count(incorrect) == 0 do
+      correct
+    else
+      incorrect
+        |> Enum.map(fn {_, e} -> e end)
+        |> Enum.join("\n")
+    end
+  end
+
+  defp parse_arg(raw_arg) do
+    case String.split(raw_arg, ":") do
+      [] -> {:error, "Your config option `#{raw_arg}` was somehow empty"}
+      [role] -> {role, role}
+      [emoji, role] -> {emoji, role}
+      _ -> {:error, "Your config option `#{raw_arg}` had too many colons"}
+    end
+  end
+
+  defp add_role_listener(roles, mid, guild) do
+    reducer = fn (state, %{emoji: received_emoji, sender: sender_id, is_add: is_add}) ->
+      matching_role = roles
+        |> Enum.find(:none, fn {e, _} -> e == received_emoji end)
+
+      case matching_role do
+        {e, r} ->
+          case DiscordQuery.role_by_name(r, guild) do
+            :none ->
+              with {:ok, dm} <- @api.create_dm(sender_id) do
+                @api.create_message(dm.id, "The role `#{r}` for emoji `#{e}` doesn't exist. Please let an admin know.")
+              end
+            role ->
+              if is_add do
+                @api.add_guild_member_role(guild.id, sender_id, role.id)
+              else
+                @api.remove_guild_member_role(guild.id, sender_id, role.id)
+              end
+          end
+        :none ->
+          :noop
+      end
+      state
+    end
+
+    Interaction.create(%Interaction{
+      name: "#{mid}:roleslistener",
+      mid: mid,
+      mstate: {},
+      reducer: reducer,
+      on_remove: nil,
+    })
+  end
+
+  defp getmatchingemoji(emojiname, guild) do
+    emoji = guild.emojis()
+      |> Enum.find(emojiname, fn e -> e.name == emojiname end)
+
+    case emoji do
+      s when is_binary(s) ->
+        s # built in emojis are just strings, like ":black_medium_square:"
+      correct = %Nostrum.Struct.Emoji{} ->
+        correct # guild.emojis() should only return these structs. But there's a bug where sometimes it returns maps instead
+      %{animated: animated, id: id, managed: managed, name: name, require_colons: require_colons, roles: roles} ->
+        %Nostrum.Struct.Emoji{animated: animated, id: id, managed: managed, name: name, require_colons: require_colons, roles: roles}
+    end
   end
 end
