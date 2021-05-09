@@ -6,7 +6,8 @@ defmodule Admin do
   def run(%Command{discord_msg: m, command: "setdaylightsavings", args: [region, enabled? | _]}), do: setdaylightsavings(m.channel_id, region, enabled?)
   def run(%Command{discord_msg: m, command: "daylightsavings"}), do: daylightsavings(m.channel_id)
   def run(%Command{discord_msg: m, command: "tryout", args: [user1, user2 | _]}), do: tryout(m.channel_id, m.guild_id, m.author.id, user1, user2)
-  def run(%Command{discord_msg: m, command: "enableRolesListener", args: [mid | rest]}), do: enableRolesListener(m.channel_id, m.guild_id, mid, rest)
+  def run(%Command{discord_msg: m, command: "enableRolesListener", args: [mid, cid | rest]}), do: enableRolesListener(m.channel_id, m.guild_id, mid, cid, rest)
+  def run(%Command{discord_msg: m, command: "disableRolesListener", args: [mid | _]}), do: disableRolesListener(m.channel_id, mid)
   def run(%Command{discord_msg: m, command: command, args: args}), do: unknown(m.channel_id, command, args, m.author.username, m.author.discriminator)
 
   defp unknown(channel_id, command, args, username, discriminator) do
@@ -34,10 +35,13 @@ defmodule Admin do
             Each arg after the first is an emoji:role pair
             If the role is absent it is assumed to be the same as the emoji
             Use quotes if the role name has spaces
-            eg: `!admin enableRolesListener 466648565415018507 Zerg Protoss Terran Random`
-            eg: `!admin enableRolesListener 466648570116702208 Bronze Silver Gold Platinum Diamond Master`
-            eg: `!admin enableRolesListener 487776565942288415 Osu Coop "Pathofexile:Path of Exile"`
-            eg: `!admin enableRolesListener 832456674 "newemoji:My New Role" "moar:Moarses"`
+            eg: `!admin enableRolesListener 466648565415018507 462380629640740874 Zerg Protoss Terran Random`
+            eg: `!admin enableRolesListener 466648570116702208 462380629640740874 Bronze Silver Gold Platinum Diamond Master`
+            eg: `!admin enableRolesListener 487776565942288415 462380629640740874 Osu Coop "Pathofexile:Path of Exile"`
+            eg: `!admin enableRolesListener 832456674 2346223 "newemoji:My New Role" "moar:Moarses"`
+
+        - disableRolesListener <mid>
+            Disabled an added role listener
       """))
     end
   end
@@ -128,25 +132,40 @@ defmodule Admin do
       |> Enum.join(", ")
   end
 
-  defp enableRolesListener(channel_id, guild_id, target_mid, raw_map) do
-    guild = Nostrum.Cache.GuildCache.get!(guild_id)
+  defp disableRolesListener(channel_id, target_mid) do
     case Integer.parse(target_mid) do
       {mid, ""} ->
-        case @api.get_channel_message(channel_id, mid) do
-          {:error, _} -> @api.create_message(channel_id, "A message with id #{mid} doesn't exist")
-          {:ok, _} ->
-            case parse_emoji_role_map(raw_map) do
-              s when is_binary(s) ->
-                @api.create_message(channel_id, "There were errors in your input:\n#{s}")
-              list ->
-                add_role_listener(list, mid, guild)
-                msg = list
-                  |> Enum.map(fn {e, r} -> "Reacting with #{getmatchingemoji(e, guild)} will now apply role `#{r}`" end)
-                  |> Enum.join("\n")
-                @api.create_message(channel_id, msg)
-            end
+        case Interaction.remove(mid) do
+          :ok -> @api.create_message(channel_id, "Removed roles listener for #{mid}")
+          {:error, _} -> @api.create_message(channel_id, "A role listener doesn't exist on #{mid}")
         end
       _ -> @api.create_message(channel_id, "The target message id needs to be an integer. You gave: `#{target_mid}`")
+    end
+  end
+
+  defp enableRolesListener(channel_id, guild_id, target_mid, target_channel_id, raw_map) do
+    guild = Nostrum.Cache.GuildCache.get!(guild_id)
+    case Integer.parse(target_channel_id) do
+      {cid, ""} ->
+        case Integer.parse(target_mid) do
+          {mid, ""} ->
+            case @api.get_channel_message(cid, mid) do
+              {:error, _} -> @api.create_message(channel_id, "A message with id #{mid} doesn't exist")
+              {:ok, _} ->
+                case parse_emoji_role_map(raw_map) do
+                  s when is_binary(s) ->
+                    @api.create_message(channel_id, "There were errors in your input:\n#{s}")
+                  list ->
+                    add_role_listener(list, mid, guild)
+                    msg = list
+                      |> Enum.map(fn {e, r} -> "Reacting with #{getmatchingemoji(e, guild)} will now apply role `#{r}`" end)
+                      |> Enum.join("\n")
+                    @api.create_message(channel_id, msg)
+                end
+            end
+          _ -> @api.create_message(channel_id, "The target message id needs to be an integer. You gave: `#{target_mid}`")
+        end
+      _ -> @api.create_message(channel_id, "The target channel id needs to be an integer. You gave: `#{target_channel_id}`")
     end
   end
 
