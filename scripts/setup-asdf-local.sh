@@ -27,5 +27,5 @@ asdf install elixir 1.8.2
 asdf global erlang 21.1
 asdf global elixir 1.8.2
 
-echo "You can now run \". ${BUILD_DIR}/asdf.sh\" in each shell you want to work in"
+echo "You can now run \"source ${BUILD_DIR}/asdf.sh\" in each shell you want to work in"
 
